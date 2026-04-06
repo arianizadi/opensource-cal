@@ -2,13 +2,10 @@ import SwiftUI
 import SwiftData
 
 @main
-struct calApp: App {
+struct calWatchApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .task {
-                    await HealthKitManager.shared.requestAuthorization()
-                }
+            WatchDashboardView()
         }
         .modelContainer(SharedModelContainer.container)
     }

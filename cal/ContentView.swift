@@ -1,61 +1,106 @@
-//
-//  ContentView.swift
-//  cal
-//
-//  Created by Arian Izadi on 4/6/26.
-//
-
 import SwiftUI
 import SwiftData
 
+enum AppTab: Int, CaseIterable {
+    case dashboard, log, scan
+
+    var icon: String {
+        switch self {
+        case .dashboard: return "chart.pie.fill"
+        case .log: return "list.bullet.clipboard.fill"
+        case .scan: return "viewfinder"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .dashboard: return "Dashboard"
+        case .log: return "Log"
+        case .scan: return "Scan"
+        }
+    }
+}
+
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @State private var selectedTab: AppTab = .dashboard
+    @State private var tabBarVisible = true
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
+        ZStack(alignment: .bottom) {
+            // Content
+            Group {
+                switch selectedTab {
+                case .dashboard:
+                    DashboardView()
+                case .log:
+                    FoodLogView()
+                case .scan:
+                    NutritionScannerView()
                 }
             }
-        } detail: {
-            Text("Select an item")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Custom Tab Bar
+            customTabBar
         }
+        .ignoresSafeArea(.keyboard)
+        .preferredColorScheme(.dark)
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
+    // MARK: - Custom Tab Bar
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+    private var customTabBar: some View {
+        HStack(spacing: 0) {
+            ForEach(AppTab.allCases, id: \.rawValue) { tab in
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        selectedTab = tab
+                    }
+                } label: {
+                    VStack(spacing: 4) {
+                        ZStack {
+                            if selectedTab == tab {
+                                Capsule()
+                                    .fill(Cal.accent.opacity(0.15))
+                                    .frame(width: 48, height: 28)
+                            }
+
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 16, weight: selectedTab == tab ? .bold : .regular))
+                                .foregroundStyle(selectedTab == tab ? Cal.accent : Cal.textTertiary)
+                        }
+                        .frame(height: 28)
+
+                        Text(tab.label.uppercased())
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .tracking(0.5)
+                            .foregroundStyle(selectedTab == tab ? Cal.accent : Cal.textTertiary)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
             }
         }
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+        .background(
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .environment(\.colorScheme, .dark)
+                .overlay(
+                    Rectangle()
+                        .fill(Cal.bg.opacity(0.7))
+                )
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.04))
+                        .frame(height: 0.5)
+                }
+                .ignoresSafeArea()
+        )
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+        .modelContainer(for: FoodEntry.self, inMemory: true)
 }
