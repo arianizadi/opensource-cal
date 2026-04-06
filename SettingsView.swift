@@ -13,9 +13,9 @@ struct SettingsView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     modeSection
+                    bodyStatsSection
+                    goalsSection
                     if profile.mode == .limit {
-                        bodyStatsSection
-                        goalsSection
                         calculatedSection
                     }
                     unitsSection
@@ -31,9 +31,13 @@ struct SettingsView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .foregroundStyle(Cal.accent)
-                        .fontWeight(.semibold)
+                    Button("Done") {
+                        profile.hasSetProfile = true
+                        profile.save()
+                        dismiss()
+                    }
+                    .foregroundStyle(Cal.accent)
+                    .fontWeight(.semibold)
                 }
             }
         }

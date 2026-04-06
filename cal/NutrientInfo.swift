@@ -16,6 +16,8 @@ struct NutrientInfo: Identifiable {
         case "Dietary Fiber": return "Fiber"
         case "Total Sugars": return "Sugars"
         case "Added Sugars": return "Added Sugar"
+        case "Polyunsaturated Fat": return "Polyunsat. Fat"
+        case "Monounsaturated Fat": return "Monounsat. Fat"
         default: return name
         }
     }
@@ -27,16 +29,19 @@ enum NutrientCategory: String, CaseIterable {
     case waterSolubleVitamin = "Water-Soluble Vitamins"
     case macromineral = "Macrominerals"
     case traceMineral = "Trace Minerals"
+    case other = "Other"
 }
 
 struct NutrientDatabase {
-    static let all: [NutrientInfo] = macros + fatSolubleVitamins + waterSolubleVitamins + macrominerals + traceMinerals
+    static let all: [NutrientInfo] = macros + fatSolubleVitamins + waterSolubleVitamins + macrominerals + traceMinerals + others
 
     static let macros: [NutrientInfo] = [
         NutrientInfo(name: "Calories", unit: "kcal", dailyValue: 2000, category: .macro, keyPath: \.calories),
         NutrientInfo(name: "Total Fat", unit: "g", dailyValue: 78, category: .macro, keyPath: \.totalFat),
         NutrientInfo(name: "Saturated Fat", unit: "g", dailyValue: 20, category: .macro, keyPath: \.saturatedFat),
         NutrientInfo(name: "Trans Fat", unit: "g", dailyValue: 2, category: .macro, keyPath: \.transFat),
+        NutrientInfo(name: "Polyunsaturated Fat", unit: "g", dailyValue: 22, category: .macro, keyPath: \.polyunsaturatedFat),
+        NutrientInfo(name: "Monounsaturated Fat", unit: "g", dailyValue: 22, category: .macro, keyPath: \.monounsaturatedFat),
         NutrientInfo(name: "Cholesterol", unit: "mg", dailyValue: 300, category: .macro, keyPath: \.cholesterol),
         NutrientInfo(name: "Sodium", unit: "mg", dailyValue: 2300, category: .macro, keyPath: \.sodium),
         NutrientInfo(name: "Total Carbohydrates", unit: "g", dailyValue: 275, category: .macro, keyPath: \.totalCarbohydrates),
@@ -81,6 +86,14 @@ struct NutrientDatabase {
         NutrientInfo(name: "Selenium", unit: "mcg", dailyValue: 55, category: .traceMineral, keyPath: \.selenium),
         NutrientInfo(name: "Iodine", unit: "mcg", dailyValue: 150, category: .traceMineral, keyPath: \.iodine),
         NutrientInfo(name: "Fluoride", unit: "mg", dailyValue: 4, category: .traceMineral, keyPath: \.fluoride),
+        NutrientInfo(name: "Chromium", unit: "mcg", dailyValue: 35, category: .traceMineral, keyPath: \.chromium),
+        NutrientInfo(name: "Molybdenum", unit: "mcg", dailyValue: 45, category: .traceMineral, keyPath: \.molybdenum),
+    ]
+
+    static let others: [NutrientInfo] = [
+        NutrientInfo(name: "Choline", unit: "mg", dailyValue: 550, category: .other, keyPath: \.choline),
+        NutrientInfo(name: "Caffeine", unit: "mg", dailyValue: 400, category: .other, keyPath: \.caffeine),
+        NutrientInfo(name: "Water", unit: "mL", dailyValue: 3700, category: .other, keyPath: \.water),
     ]
 
     static func totalForEntries(_ entries: [FoodEntry], nutrient: NutrientInfo) -> Double {

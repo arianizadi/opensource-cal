@@ -5,7 +5,7 @@ enum SharedModelContainer {
     static let appGroupID = "group.com.ariandev.cal"
 
     static var container: ModelContainer = {
-        let schema = Schema([FoodEntry.self])
+        let schema = Schema([FoodEntry.self, MealTemplate.self])
         let config = ModelConfiguration(
             schema: schema,
             url: storeURL,

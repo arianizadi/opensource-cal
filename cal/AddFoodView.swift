@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import WidgetKit
 
 struct AddFoodView: View {
     @Environment(\.modelContext) private var modelContext
@@ -12,14 +13,18 @@ struct AddFoodView: View {
     @State private var showMicros = false
 
     var scannedData: [String: Double]?
+    var onSave: (() -> Void)?
 
-    init(scannedData: [String: Double]? = nil) {
+    init(scannedData: [String: Double]? = nil, onSave: (() -> Void)? = nil) {
         self.scannedData = scannedData
+        self.onSave = onSave
     }
 
     private static let macroFields: [(key: String, label: String, unit: String)] = [
         ("saturatedFat", "Sat. Fat", "g"),
         ("transFat", "Trans Fat", "g"),
+        ("polyunsaturatedFat", "Polyunsat. Fat", "g"),
+        ("monounsaturatedFat", "Monounsat. Fat", "g"),
         ("cholesterol", "Cholesterol", "mg"),
         ("sodium", "Sodium", "mg"),
         ("dietaryFiber", "Fiber", "g"),
@@ -56,6 +61,14 @@ struct AddFoodView: View {
         ("iodine", "Iodine", "mcg"),
         ("chloride", "Chloride", "mg"),
         ("fluoride", "Fluoride", "mg"),
+        ("chromium", "Chromium", "mcg"),
+        ("molybdenum", "Molybdenum", "mcg"),
+    ]
+
+    private static let otherFields: [(key: String, label: String, unit: String)] = [
+        ("choline", "Choline", "mg"),
+        ("caffeine", "Caffeine", "mg"),
+        ("water", "Water", "mL"),
     ]
 
     var body: some View {
@@ -86,11 +99,8 @@ struct AddFoodView: View {
                     } label: {
                         Text("Save")
                             .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
-                            .background(Cal.accentGradient, in: Capsule())
                     }
+                    .tint(Cal.accent)
                     .disabled(val("calories").isEmpty && name.isEmpty)
                 }
             }
@@ -176,6 +186,10 @@ struct AddFoodView: View {
             ForEach(Self.mineralFields, id: \.key) { field in
                 nutrientField(field.label, key: field.key, unit: field.unit)
             }
+            microHeader("Other", color: Cal.accent)
+            ForEach(Self.otherFields, id: \.key) { field in
+                nutrientField(field.label, key: field.key, unit: field.unit)
+            }
         }
     }
 
@@ -201,7 +215,7 @@ struct AddFoodView: View {
                 .foregroundStyle(Cal.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 TextField("0", text: binding(for: key))
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
@@ -213,9 +227,9 @@ struct AddFoodView: View {
                     .background(Cal.bgSubtle, in: RoundedRectangle(cornerRadius: 8))
 
                 Text(unit)
-                    .font(.mono(10))
+                    .font(.mono(11))
                     .foregroundStyle(Cal.textTertiary)
-                    .frame(width: 30, alignment: .leading)
+                    .frame(width: 34, alignment: .leading)
             }
         }
     }
@@ -230,15 +244,18 @@ struct AddFoodView: View {
                     .font(.system(size: 9, weight: .bold, design: .rounded))
                     .foregroundStyle(Cal.textTertiary)
             }
-            HStack(spacing: 2) {
+            ZStack(alignment: .trailing) {
                 TextField("0", text: binding(for: key))
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.center)
                     .font(.system(size: 18, weight: .bold, design: .rounded))
                     .foregroundStyle(Cal.textPrimary)
+                    .padding(.horizontal, 16)
+
                 Text(unit)
                     .font(.mono(10))
                     .foregroundStyle(Cal.textTertiary)
+                    .padding(.trailing, 8)
             }
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity)
@@ -284,7 +301,7 @@ struct AddFoodView: View {
             values[key] = formatValue(value)
         }
 
-        let microKeys = Self.vitaminFields.map(\.key) + Self.mineralFields.map(\.key)
+        let microKeys = Self.vitaminFields.map(\.key) + Self.mineralFields.map(\.key) + Self.otherFields.map(\.key)
         if microKeys.contains(where: { data[$0] != nil && data[$0]! > 0 }) {
             showMicros = true
         }
@@ -335,9 +352,18 @@ struct AddFoodView: View {
             manganese: num("manganese"),
             selenium: num("selenium"),
             iodine: num("iodine"),
-            fluoride: num("fluoride")
+            fluoride: num("fluoride"),
+            chromium: num("chromium"),
+            molybdenum: num("molybdenum"),
+            choline: num("choline"),
+            polyunsaturatedFat: num("polyunsaturatedFat"),
+            monounsaturatedFat: num("monounsaturatedFat"),
+            caffeine: num("caffeine"),
+            water: num("water")
         )
         modelContext.insert(entry)
+        WidgetCenter.shared.reloadAllTimelines()
+        onSave?()
 
         Task {
             if let hkID = await healthKit.saveFoodEntry(entry) {

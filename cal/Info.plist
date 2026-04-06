@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is needed to scan nutrition labels</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access is needed to select nutrition label photos</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>This app reads nutrition data from Health to display your daily intake</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>This app saves your food entries to Health so you can track nutrition across apps</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

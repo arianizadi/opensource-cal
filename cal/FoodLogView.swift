@@ -8,6 +8,7 @@ struct FoodLogView: View {
     @State private var selectedDate: Date = .now
     @State private var showingAddFood = false
     @State private var showingScanner = false
+    @State private var showingSavedMeals = false
 
     private var todaysEntries: [FoodEntry] {
         allEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
@@ -38,11 +39,16 @@ struct FoodLogView: View {
                 } else {
                     Section {
                         ForEach(todaysEntries) { entry in
-                            NavigationLink {
-                                FoodDetailView(entry: entry, onDelete: {
-                                    deleteEntry(entry)
-                                })
-                            } label: {
+                            ZStack {
+                                NavigationLink {
+                                    FoodDetailView(entry: entry, onDelete: {
+                                        deleteEntry(entry)
+                                    })
+                                } label: {
+                                    EmptyView()
+                                }
+                                .opacity(0)
+
                                 FoodEntryCard(entry: entry)
                             }
                             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
@@ -86,14 +92,19 @@ struct FoodLogView: View {
                         } label: {
                             Label("Scan Label", systemImage: "camera")
                         }
+                        Button {
+                            showingSavedMeals = true
+                        } label: {
+                            Label("Saved Meals", systemImage: "bookmark")
+                        }
                     } label: {
                         ZStack {
                             Circle()
-                                .fill(Cal.accentGradient)
+                                .fill(Cal.bgElevated)
                                 .frame(width: 32, height: 32)
                             Image(systemName: "plus")
                                 .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(Cal.accent)
                         }
                     }
                 }
@@ -104,6 +115,9 @@ struct FoodLogView: View {
             }
             .fullScreenCover(isPresented: $showingScanner) {
                 NutritionScannerView()
+            }
+            .sheet(isPresented: $showingSavedMeals) {
+                SavedMealsView()
             }
         }
     }
@@ -256,8 +270,10 @@ struct FoodEntryCard: View {
 
 struct FoodDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     let entry: FoodEntry
     var onDelete: (() -> Void)?
+    @State private var showSavedConfirmation = false
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -332,23 +348,53 @@ struct FoodDetailView: View {
                     detailRow("Fluoride", value: entry.fluoride, unit: "mg")
                 }
 
-                // Delete button
-                Button(role: .destructive) {
-                    onDelete?()
-                    dismiss()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 14, weight: .medium))
-                        Text("Delete Entry")
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                // Action buttons
+                VStack(spacing: 10) {
+                    Button {
+                        let template = MealTemplate(from: entry)
+                        modelContext.insert(template)
+                        showSavedConfirmation = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "bookmark.fill")
+                                .font(.system(size: 14, weight: .medium))
+                            Text("Save as Template")
+                                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Cal.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(Cal.accent)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Cal.low.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
-                    .foregroundStyle(Cal.low)
+
+                    Button(role: .destructive) {
+                        onDelete?()
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 14, weight: .medium))
+                            Text("Delete Entry")
+                                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Cal.low.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(Cal.low)
+                    }
                 }
                 .padding(.top, 8)
+                .overlay {
+                    if showSavedConfirmation {
+                        savedToast
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .onAppear {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                    withAnimation { showSavedConfirmation = false }
+                                }
+                            }
+                    }
+                }
 
                 Spacer(minLength: 40)
             }
@@ -357,6 +403,20 @@ struct FoodDetailView: View {
         .background(Cal.bg)
         .navigationTitle(entry.name.isEmpty ? "Food Details" : entry.name)
         .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    private var savedToast: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(Cal.good)
+            Text("Saved as template")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(Cal.textPrimary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial, in: Capsule())
+        .environment(\.colorScheme, .dark)
     }
 
     private func detailSection(_ title: String, @ViewBuilder content: () -> some View) -> some View {

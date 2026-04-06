@@ -25,7 +25,7 @@ struct WatchDashboardView: View {
     }
 
     private var dailyScore: DailyScore {
-        DailyScore.score(entries: todaysEntries)
+        DailyScore.score(entries: todaysEntries, profile: UserProfile.shared)
     }
 
     var body: some View {

@@ -1,14 +1,19 @@
 import SwiftUI
 import SwiftData
 
+extension Notification.Name {
+    static let switchToDashboard = Notification.Name("switchToDashboard")
+}
+
 enum AppTab: Int, CaseIterable {
-    case dashboard, log, scan
+    case dashboard, log, scan, analytics
 
     var icon: String {
         switch self {
         case .dashboard: return "chart.pie.fill"
         case .log: return "list.bullet.clipboard.fill"
         case .scan: return "viewfinder"
+        case .analytics: return "chart.line.uptrend.xyaxis"
         }
     }
 
@@ -17,6 +22,7 @@ enum AppTab: Int, CaseIterable {
         case .dashboard: return "Dashboard"
         case .log: return "Log"
         case .scan: return "Scan"
+        case .analytics: return "Insights"
         }
     }
 }
@@ -36,6 +42,8 @@ struct ContentView: View {
                     FoodLogView()
                 case .scan:
                     NutritionScannerView()
+                case .analytics:
+                    AnalyticsView()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -45,6 +53,11 @@ struct ContentView: View {
         }
         .ignoresSafeArea(.keyboard)
         .preferredColorScheme(.dark)
+        .onReceive(NotificationCenter.default.publisher(for: .switchToDashboard)) { _ in
+            withAnimation(.spring(response: 0.35)) {
+                selectedTab = .dashboard
+            }
+        }
     }
 
     // MARK: - Custom Tab Bar
@@ -61,20 +74,34 @@ struct ContentView: View {
                         ZStack {
                             if selectedTab == tab {
                                 Capsule()
-                                    .fill(Cal.accent.opacity(0.15))
+                                    .fill(Cal.accentGradient)
+                                    .opacity(0.2)
+                                    .frame(width: 48, height: 28)
+                                    .blur(radius: 4)
+                                Capsule()
+                                    .fill(Cal.accentGradient)
+                                    .opacity(0.12)
                                     .frame(width: 48, height: 28)
                             }
 
                             Image(systemName: tab.icon)
                                 .font(.system(size: 16, weight: selectedTab == tab ? .bold : .regular))
-                                .foregroundStyle(selectedTab == tab ? Cal.accent : Cal.textTertiary)
+                                .foregroundStyle(
+                                    selectedTab == tab
+                                        ? AnyShapeStyle(Cal.accentGradient)
+                                        : AnyShapeStyle(Cal.textTertiary)
+                                )
                         }
                         .frame(height: 28)
 
                         Text(tab.label.uppercased())
                             .font(.system(size: 9, weight: .bold, design: .rounded))
                             .tracking(0.5)
-                            .foregroundStyle(selectedTab == tab ? Cal.accent : Cal.textTertiary)
+                            .foregroundStyle(
+                                selectedTab == tab
+                                    ? AnyShapeStyle(Cal.accentGradient)
+                                    : AnyShapeStyle(Cal.textTertiary)
+                            )
                     }
                     .frame(maxWidth: .infinity)
                 }

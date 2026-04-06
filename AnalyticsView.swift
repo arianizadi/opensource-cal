@@ -5,6 +5,9 @@ import Charts
 struct AnalyticsView: View {
     @Query(sort: \FoodEntry.date, order: .reverse) private var entries: [FoodEntry]
     @State private var selectedPeriod: TimePeriod = .week
+    @State private var weightSamples: [HealthKitManager.WeightSample] = []
+    private var healthKit = HealthKitManager.shared
+    private var profile = UserProfile.shared
 
     enum TimePeriod: String, CaseIterable {
         case week = "7D"
@@ -32,6 +35,18 @@ struct AnalyticsView: View {
         AnalyticsEngine.scoredFoods(from: entries)
     }
 
+    private var weightTrend: [WeightDataPoint] {
+        AnalyticsEngine.weightTrend(from: weightSamples, useImperial: profile.useImperial)
+    }
+
+    private var deficits: [DeficitDay] {
+        AnalyticsEngine.dailyDeficits(from: entries, profile: profile, days: selectedPeriod.days)
+    }
+
+    private var correlations: [WeeklyCorrelation] {
+        AnalyticsEngine.weeklyCorrelations(entries: entries, weights: weightSamples, profile: profile)
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -39,6 +54,9 @@ struct AnalyticsView: View {
                 periodPicker
                 calorieTrendCard
                 macroTrendCard
+                weightTrendCard
+                deficitCard
+                correlationCard
                 topFoodsCard
                 worstFoodsCard
                 nutrientGapsCard
@@ -48,6 +66,16 @@ struct AnalyticsView: View {
         }
         .background(Cal.bg)
         .scrollIndicators(.hidden)
+        .task {
+            await loadWeight()
+        }
+        .onChange(of: selectedPeriod) {
+            Task { await loadWeight() }
+        }
+    }
+
+    private func loadWeight() async {
+        weightSamples = await healthKit.fetchWeightSamples(days: selectedPeriod.days + 7)
     }
 
     // MARK: - Header
@@ -239,6 +267,7 @@ struct AnalyticsView: View {
                     "Carbs": Cal.carbs,
                     "Fat": Cal.fat
                 ])
+                .chartLegend(.hidden)
                 .frame(height: 160)
 
                 HStack(spacing: 16) {
@@ -249,6 +278,299 @@ struct AnalyticsView: View {
             }
         }
         .glassCard()
+    }
+
+    // MARK: - Weight Trend
+
+    private var weightTrendCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("WEIGHT")
+                    .font(.label())
+                    .tracking(1.2)
+                    .foregroundStyle(Cal.textSecondary)
+                Spacer()
+                if let latest = weightTrend.last {
+                    let val = profile.useImperial ? latest.lbs : latest.kg
+                    let unit = profile.useImperial ? "lbs" : "kg"
+                    Text("\(String(format: "%.1f", val)) \(unit)")
+                        .font(.mono(12))
+                        .foregroundStyle(Cal.textTertiary)
+                }
+            }
+
+            if weightTrend.count < 2 {
+                weightEmptyState
+            } else {
+                let values = weightTrend.map { profile.useImperial ? $0.lbs : $0.kg }
+                let minVal = (values.min() ?? 0) - 1
+                let maxVal = (values.max() ?? 0) + 1
+                let unit = profile.useImperial ? "lbs" : "kg"
+
+                Chart(weightTrend) { point in
+                    let val = profile.useImperial ? point.lbs : point.kg
+
+                    AreaMark(
+                        x: .value("Date", point.date),
+                        yStart: .value("Weight", minVal),
+                        yEnd: .value("Weight", val)
+                    )
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Cal.glowCyan.opacity(0.25), Cal.glowCyan.opacity(0.03)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                    .interpolationMethod(.catmullRom)
+
+                    LineMark(
+                        x: .value("Date", point.date),
+                        y: .value("Weight", val)
+                    )
+                    .foregroundStyle(Cal.glowCyan)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5))
+                    .interpolationMethod(.catmullRom)
+
+                    PointMark(
+                        x: .value("Date", point.date),
+                        y: .value("Weight", val)
+                    )
+                    .foregroundStyle(Cal.glowCyan)
+                    .symbolSize(24)
+                }
+                .chartYScale(domain: minVal...maxVal)
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 5)) { value in
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Cal.textTertiary)
+                            }
+                        }
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(position: .trailing) { value in
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) {
+                                Text("\(String(format: "%.0f", v))")
+                                    .font(.mono(10))
+                                    .foregroundStyle(Cal.textTertiary)
+                            }
+                        }
+                    }
+                }
+                .frame(height: 160)
+
+                if weightTrend.count >= 2 {
+                    let first = profile.useImperial ? weightTrend.first!.lbs : weightTrend.first!.kg
+                    let last = profile.useImperial ? weightTrend.last!.lbs : weightTrend.last!.kg
+                    let change = last - first
+                    let sign = change >= 0 ? "+" : ""
+                    HStack {
+                        Text("Change over period")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Cal.textTertiary)
+                        Spacer()
+                        Text("\(sign)\(String(format: "%.1f", change)) \(unit)")
+                            .font(.mono(13))
+                            .foregroundStyle(change < 0 ? Cal.good : (change > 0 ? Cal.warn : Cal.textSecondary))
+                    }
+                }
+            }
+        }
+        .glassCard()
+    }
+
+    // MARK: - Daily Deficit
+
+    private var deficitCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("DAILY DEFICIT")
+                    .font(.label())
+                    .tracking(1.2)
+                    .foregroundStyle(Cal.textSecondary)
+                Spacer()
+                let avgDeficit = deficits.filter { $0.calories > 0 }
+                if !avgDeficit.isEmpty {
+                    let avg = avgDeficit.reduce(0) { $0 + $1.deficit } / Double(avgDeficit.count)
+                    Text("avg \(avg >= 0 ? "−" : "+")\(Int(abs(avg)))")
+                        .font(.mono(12))
+                        .foregroundStyle(Cal.textTertiary)
+                }
+            }
+
+            let logged = deficits.filter { $0.calories > 0 }
+            if logged.isEmpty {
+                emptyState
+            } else {
+                Chart(logged) { day in
+                    BarMark(
+                        x: .value("Date", day.date, unit: .day),
+                        y: .value("Deficit", day.deficit)
+                    )
+                    .foregroundStyle(day.deficit >= 0 ? Cal.good.opacity(0.7) : Cal.low.opacity(0.7))
+                    .cornerRadius(3)
+                }
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: selectedPeriod == .week ? .day : .weekOfYear)) { value in
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(date.formatted(selectedPeriod == .week ? .dateTime.weekday(.narrow) : .dateTime.month(.abbreviated).day()))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Cal.textTertiary)
+                            }
+                        }
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(position: .trailing) { value in
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) {
+                                Text("\(Int(v))")
+                                    .font(.mono(10))
+                                    .foregroundStyle(Cal.textTertiary)
+                            }
+                        }
+                    }
+                }
+                .frame(height: 140)
+
+                HStack(spacing: 16) {
+                    HStack(spacing: 4) {
+                        Circle().fill(Cal.good).frame(width: 6, height: 6)
+                        Text("Under target")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Cal.textSecondary)
+                    }
+                    HStack(spacing: 4) {
+                        Circle().fill(Cal.low).frame(width: 6, height: 6)
+                        Text("Over target")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Cal.textSecondary)
+                    }
+                }
+            }
+        }
+        .glassCard()
+    }
+
+    // MARK: - Weekly Correlation (Actual vs Theoretical)
+
+    private var correlationCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("DEFICIT vs WEIGHT CHANGE")
+                    .font(.label())
+                    .tracking(1.2)
+                    .foregroundStyle(Cal.textSecondary)
+                Text("Weekly: actual vs predicted from calories")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Cal.textTertiary)
+            }
+
+            if correlations.isEmpty {
+                VStack(spacing: 8) {
+                    Text("Needs weight data + food logs")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Cal.textTertiary)
+                    Text("Log weight in the Health app and track food for 1+ weeks to see how your calorie deficit correlates with actual weight change.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Cal.textTertiary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 20)
+            } else {
+                let useImp = profile.useImperial
+                let factor = useImp ? 2.20462 : 1.0
+                let unit = useImp ? "lbs" : "kg"
+
+                Chart {
+                    ForEach(correlations) { week in
+                        BarMark(
+                            x: .value("Week", week.weekStart, unit: .weekOfYear),
+                            y: .value("Actual", week.weightChange * factor)
+                        )
+                        .foregroundStyle(Cal.glowCyan.opacity(0.7))
+                        .cornerRadius(4)
+                        .position(by: .value("Type", "Actual"))
+
+                        BarMark(
+                            x: .value("Week", week.weekStart, unit: .weekOfYear),
+                            y: .value("Predicted", week.theoreticalChange * factor)
+                        )
+                        .foregroundStyle(Cal.glowPurple.opacity(0.5))
+                        .cornerRadius(4)
+                        .position(by: .value("Type", "Predicted"))
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .weekOfYear)) { value in
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Cal.textTertiary)
+                            }
+                        }
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(position: .trailing) { value in
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) {
+                                Text("\(String(format: "%.1f", v))")
+                                    .font(.mono(10))
+                                    .foregroundStyle(Cal.textTertiary)
+                            }
+                        }
+                    }
+                }
+                .chartForegroundStyleScale([
+                    "Actual": Cal.glowCyan,
+                    "Predicted": Cal.glowPurple
+                ])
+                .chartLegend(.hidden)
+                .frame(height: 160)
+
+                HStack(spacing: 16) {
+                    HStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 2).fill(Cal.glowCyan).frame(width: 12, height: 8)
+                        Text("Actual (\(unit))")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Cal.textSecondary)
+                    }
+                    HStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 2).fill(Cal.glowPurple).frame(width: 12, height: 8)
+                        Text("Predicted")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Cal.textSecondary)
+                    }
+                }
+
+                Text("Predicted assumes 7,700 kcal deficit ≈ 1 kg loss. Actual results vary with water retention, metabolism, and activity.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Cal.textTertiary)
+            }
+        }
+        .glassCard()
+    }
+
+    private var weightEmptyState: some View {
+        VStack(spacing: 8) {
+            Text("No weight data")
+                .font(.system(size: 14))
+                .foregroundStyle(Cal.textTertiary)
+            Text("Log your weight in the Health app or a connected scale to see trends here.")
+                .font(.system(size: 12))
+                .foregroundStyle(Cal.textTertiary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 20)
     }
 
     // MARK: - Top Foods

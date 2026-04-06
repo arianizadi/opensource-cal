@@ -51,6 +51,12 @@ final class HealthKitManager {
             .dietaryManganese,
             .dietarySelenium,
             .dietaryIodine,
+            .dietaryFatPolyunsaturated,
+            .dietaryFatMonounsaturated,
+            .dietaryChromium,
+            .dietaryMolybdenum,
+            .dietaryCaffeine,
+            .dietaryWater,
         ]
         var types = Set<HKSampleType>()
         for id in identifiers {
@@ -58,8 +64,14 @@ final class HealthKitManager {
                 types.insert(type)
             }
         }
-        if let foodType = HKCorrelationType.correlationType(forIdentifier: .food) {
-            types.insert(foodType)
+        return types
+    }
+
+    // Types we want to read (body measurements)
+    private var readTypes: Set<HKObjectType> {
+        var types = Set<HKObjectType>()
+        if let bodyMass = HKQuantityType.quantityType(forIdentifier: .bodyMass) {
+            types.insert(bodyMass)
         }
         return types
     }
@@ -68,15 +80,60 @@ final class HealthKitManager {
         guard isAvailable else { return }
 
         do {
-            try await healthStore.requestAuthorization(toShare: allNutritionTypes, read: [])
+            try await healthStore.requestAuthorization(toShare: allNutritionTypes, read: readTypes)
             isAuthorized = true
         } catch {
             print("HealthKit authorization failed: \(error)")
         }
     }
 
-    func saveFoodEntry(_ entry: FoodEntry) async {
-        guard isAvailable, isAuthorized else { return }
+    // MARK: - Weight Reading
+
+    struct WeightSample: Identifiable {
+        let id = UUID()
+        let date: Date
+        let kg: Double
+    }
+
+    /// Fetch weight samples from HealthKit for the given number of days
+    func fetchWeightSamples(days: Int) async -> [WeightSample] {
+        guard isAvailable else { return [] }
+
+        guard let bodyMassType = HKQuantityType.quantityType(forIdentifier: .bodyMass) else { return [] }
+
+        let calendar = Calendar.current
+        let endDate = Date()
+        guard let startDate = calendar.date(byAdding: .day, value: -days, to: endDate) else { return [] }
+
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: bodyMassType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sortDescriptor]
+            ) { _, results, error in
+                guard let samples = results as? [HKQuantitySample], error == nil else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                let weightSamples = samples.map { sample in
+                    WeightSample(
+                        date: sample.startDate,
+                        kg: sample.quantity.doubleValue(for: .gramUnit(with: .kilo))
+                    )
+                }
+                continuation.resume(returning: weightSamples)
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    /// Returns the HealthKit UUID string so we can delete later
+    func saveFoodEntry(_ entry: FoodEntry) async -> String? {
+        guard isAvailable, isAuthorized else { return nil }
 
         let date = entry.date
         var samples: [HKQuantitySample] = []
@@ -131,11 +188,17 @@ final class HealthKitManager {
         add(.dietaryManganese, value: entry.manganese, unit: mg)
         add(.dietarySelenium, value: entry.selenium, unit: mcg)
         add(.dietaryIodine, value: entry.iodine, unit: mcg)
+        add(.dietaryFatPolyunsaturated, value: entry.polyunsaturatedFat, unit: gram)
+        add(.dietaryFatMonounsaturated, value: entry.monounsaturatedFat, unit: gram)
+        add(.dietaryChromium, value: entry.chromium, unit: mcg)
+        add(.dietaryMolybdenum, value: entry.molybdenum, unit: mcg)
+        add(.dietaryCaffeine, value: entry.caffeine, unit: mg)
+        add(.dietaryWater, value: entry.water, unit: HKUnit.literUnit(with: .milli))
 
-        guard !samples.isEmpty else { return }
+        guard !samples.isEmpty else { return nil }
 
         // Create a food correlation to group all nutritional samples
-        guard let foodType = HKCorrelationType.correlationType(forIdentifier: .food) else { return }
+        guard let foodType = HKCorrelationType.correlationType(forIdentifier: .food) else { return nil }
         var metadata: [String: Any] = [:]
         if !entry.name.isEmpty {
             metadata[HKMetadataKeyFoodType] = entry.name
@@ -151,8 +214,46 @@ final class HealthKitManager {
 
         do {
             try await healthStore.save(foodCorrelation)
+            return foodCorrelation.uuid.uuidString
         } catch {
             print("Failed to save to HealthKit: \(error)")
+            return nil
+        }
+    }
+
+    func deleteFoodEntry(healthKitID: String) async {
+        guard isAvailable, isAuthorized else { return }
+        guard let uuid = UUID(uuidString: healthKitID) else { return }
+
+        guard let foodType = HKCorrelationType.correlationType(forIdentifier: .food) else { return }
+        let predicate = HKQuery.predicateForObject(with: uuid)
+
+        do {
+            // Fetch the correlation first, then delete it and its child samples
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let query = HKCorrelationQuery(type: foodType, predicate: predicate, samplePredicates: nil) { _, results, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    guard let correlation = results?.first else {
+                        continuation.resume()
+                        return
+                    }
+                    // Delete child samples and the correlation
+                    let allObjects = Array(correlation.objects) + [correlation]
+                    self.healthStore.delete(allObjects) { _, deleteError in
+                        if let deleteError {
+                            continuation.resume(throwing: deleteError)
+                        } else {
+                            continuation.resume()
+                        }
+                    }
+                }
+                healthStore.execute(query)
+            }
+        } catch {
+            print("Failed to delete from HealthKit: \(error)")
         }
     }
 }

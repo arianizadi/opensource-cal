@@ -5,13 +5,15 @@ import Vision
 
 // All FoodEntry keys that the app tracks
 private let trackedKeys: Set<String> = [
-    "calories", "totalFat", "saturatedFat", "transFat", "cholesterol", "sodium",
+    "calories", "totalFat", "saturatedFat", "transFat", "polyunsaturatedFat",
+    "monounsaturatedFat", "cholesterol", "sodium",
     "totalCarbohydrates", "dietaryFiber", "totalSugars", "addedSugars", "protein",
     "vitaminA", "vitaminD", "vitaminE", "vitaminK", "vitaminC",
     "thiamine", "riboflavin", "niacin", "pantothenicAcid", "vitaminB6",
-    "biotin", "folate", "vitaminB12",
+    "biotin", "folate", "vitaminB12", "choline",
     "calcium", "phosphorus", "magnesium", "potassium", "chloride",
     "iron", "zinc", "copper", "manganese", "selenium", "iodine", "fluoride",
+    "chromium", "molybdenum", "caffeine", "water",
 ]
 
 private let nutrientDisplayNames: [String: String] = [
@@ -29,6 +31,7 @@ private let nutrientDisplayNames: [String: String] = [
     "iodine": "Iodine", "chloride": "Chloride", "fluoride": "Fluoride",
     "polyunsaturatedFat": "Polyunsaturated Fat", "monounsaturatedFat": "Monounsaturated Fat",
     "chromium": "Chromium", "molybdenum": "Molybdenum", "choline": "Choline",
+    "caffeine": "Caffeine", "water": "Water",
 ]
 
 private let nutrientUnits: [String: String] = [
@@ -43,17 +46,21 @@ private let nutrientUnits: [String: String] = [
     "manganese": "mg", "selenium": "mcg", "iodine": "mcg", "chloride": "mg",
     "fluoride": "mg", "polyunsaturatedFat": "g", "monounsaturatedFat": "g",
     "chromium": "mcg", "molybdenum": "mcg", "choline": "mg",
+    "caffeine": "mg", "water": "mL",
 ]
 
 // Display order for matched nutrients
 private let displayOrder: [String] = [
-    "calories", "totalFat", "saturatedFat", "transFat", "cholesterol",
-    "sodium", "totalCarbohydrates", "dietaryFiber", "totalSugars",
-    "addedSugars", "protein", "vitaminA", "vitaminC", "vitaminD", "vitaminE",
-    "vitaminK", "thiamine", "riboflavin", "niacin", "pantothenicAcid",
-    "vitaminB6", "biotin", "folate", "vitaminB12", "calcium", "phosphorus",
-    "magnesium", "potassium", "chloride", "iron", "zinc", "copper",
-    "manganese", "selenium", "iodine", "fluoride",
+    "calories", "totalFat", "saturatedFat", "transFat", "polyunsaturatedFat",
+    "monounsaturatedFat", "cholesterol", "sodium", "totalCarbohydrates",
+    "dietaryFiber", "totalSugars", "addedSugars", "protein",
+    "vitaminA", "vitaminC", "vitaminD", "vitaminE", "vitaminK",
+    "thiamine", "riboflavin", "niacin", "pantothenicAcid", "vitaminB6",
+    "biotin", "folate", "vitaminB12", "choline",
+    "calcium", "phosphorus", "magnesium", "potassium", "chloride",
+    "iron", "zinc", "copper", "manganese", "selenium", "iodine", "fluoride",
+    "chromium", "molybdenum",
+    "caffeine", "water",
 ]
 
 struct NutritionScannerView: View {
@@ -112,7 +119,18 @@ struct NutritionScannerView: View {
                 PhotoPickerView(image: $capturedImage)
             }
             .sheet(isPresented: $showingAddFood) {
-                AddFoodView(scannedData: parsedData.filter { trackedKeys.contains($0.key) })
+                AddFoodView(
+                    scannedData: parsedData.filter { trackedKeys.contains($0.key) },
+                    onSave: {
+                        // Reset scanner state after saving
+                        capturedImage = nil
+                        parsedData = [:]
+                        recognizedLines = []
+                        errorMessage = nil
+                        // Switch to dashboard
+                        NotificationCenter.default.post(name: .switchToDashboard, object: nil)
+                    }
+                )
             }
             .onChange(of: capturedImage) { _, newImage in
                 if let image = newImage {

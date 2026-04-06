@@ -52,6 +52,7 @@ struct NutritionLabelParser {
             (["chromium"], "chromium", []),
             (["molybdenum"], "molybdenum", []),
             (["choline"], "choline", []),
+            (["caffeine"], "caffeine", []),
         ]
 
         // Process each line for absolute values
@@ -109,8 +110,8 @@ struct NutritionLabelParser {
 
         // MARK: - Pass 2: Convert %DV to absolute values for missing nutrients
 
+        // Note: Calories are excluded — labels don't show %DV for calories
         let dvTable: [(key: String, dailyValue: Double, patterns: [String])] = [
-            ("calories", 2000, ["calories"]),
             ("totalFat", 78, ["total fat"]),
             ("saturatedFat", 20, ["saturated fat", "sat. fat", "sat fat"]),
             ("cholesterol", 300, ["cholesterol"]),

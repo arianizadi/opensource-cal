@@ -79,6 +79,7 @@ final class UserProfile {
     var activityLevel: ActivityLevel
     var weightGoal: WeightGoal
     var useImperial: Bool
+    var hasSetProfile: Bool
 
     private init() {
         let defaults = UserDefaults.standard
@@ -90,6 +91,7 @@ final class UserProfile {
         self.activityLevel = ActivityLevel(rawValue: defaults.string(forKey: "activityLevel") ?? "") ?? .moderate
         self.weightGoal = WeightGoal(rawValue: defaults.string(forKey: "weightGoal") ?? "") ?? .maintain
         self.useImperial = defaults.bool(forKey: "useImperial")
+        self.hasSetProfile = defaults.bool(forKey: "hasSetProfile")
     }
 
     func save() {
@@ -102,6 +104,7 @@ final class UserProfile {
         defaults.set(activityLevel.rawValue, forKey: "activityLevel")
         defaults.set(weightGoal.rawValue, forKey: "weightGoal")
         defaults.set(useImperial, forKey: "useImperial")
+        defaults.set(hasSetProfile, forKey: "hasSetProfile")
     }
 
     // MARK: - TDEE Calculation (Mifflin-St Jeor)

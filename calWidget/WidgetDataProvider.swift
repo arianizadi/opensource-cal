@@ -48,7 +48,7 @@ enum WidgetDataProvider {
             let carbs = entries.reduce(0.0) { $0 + $1.totalCarbohydrates }
             let fat = entries.reduce(0.0) { $0 + $1.totalFat }
 
-            let dailyScore = DailyScore.score(entries: entries)
+            let dailyScore = DailyScore.score(entries: entries, profile: UserProfile.shared)
 
             return WidgetNutritionData(
                 calories: calories,
